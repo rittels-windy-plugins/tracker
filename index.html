@@ -4,13 +4,82 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Track Windy Plugin use</title>
+        <style>
+            table{
+                font-family: Arial, sans-serif; 
+                border-collapse: collapse;
+                td, th{
+                    border: 1px solid #d3d3d3;
+                    padding: 3px;
+                }
+            }
+        </style>
     </head>
-    <body>
-        
-    </body>
+    <body></body>
     <script>
-        fetch('https://www.flymap.org.za/windy_plugins/tracker/log.json').then(e=>e.json()).then(d=>{
-            log(d);
+        const {log}=console;
+        let data;
+            const plugins=[];
+        const obj={};
+        const now=Date.now();
+        const h1=1000*60*60;
+        const h24=h1*24;
+        const w1=h24*7;
+
+        fetch('https://www.flymap.org.za/windy_plugins/tracker/log.json',{cache:"no-store"}).then(e=>e.json()).then(d=>{
+            data=d;
+            data.forEach(e => {if (!plugins.includes(e.plugin)) plugins.push(e.plugin)})
+            plugins.forEach(p=>obj[p]={});
+            for (let p in obj){
+                let opened={past1h:0,past24h:0,past1w:0,ever:0 };
+                let min3={past1h:0,past24h:0,past1w:0,ever:0 };
+                let reqs=data.filter(e=>e.plugin==p);
+                log(reqs);
+                reqs.forEach(e=>{
+                    let o=e.msg=="open_user"?opened:e.msg=="3min"?min3:null;
+                    if (o==null) return;
+                    if(e.ts > now-h1) o.past1h++;
+                    if (e.ts>now-h24) o.past24h++;
+                    if (e.ts>now-w1) o.past1w++; 
+                      o.ever++;
+                }) 
+                obj[p]={opened,min3}
+            }
+            log(obj);
+            makeTable();
         })
+
+        function makeTable(){
+
+            const headingKeys=["","past1h","past24h","past1w","ever"];
+
+            const table = document.createElement('table');
+            table.border = "0";
+
+            const row = document.createElement('tr');
+            for (let c=0;c<5;c++){
+                const cell = document.createElement('td');
+                cell.innerHTML=headingKeys[c];
+                row.appendChild(cell);
+            }
+            table.appendChild(row);
+            for(let p in obj){
+                for (let r=0; r<3; r++){
+                    const row = document.createElement('tr'); 
+                    if(r==0) row.innerHTML='<b>'+p+'</b>';
+                    else {
+                        let o = r==1?'opened':'min3';
+                        for (let c=0; c< 5; c++){
+                            const cell = document.createElement('td');
+                            log(obj[o]);
+                            cell.innerHTML=c==0?o:obj[p][o][headingKeys[c]];
+                            row.appendChild(cell);
+                        }
+                    }
+                    table.appendChild(row);
+                }
+            }
+            document.body.appendChild(table);
+        }
     </script>
 </html>
