@@ -3,12 +3,14 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Blank Page</title>
+        <title>Track Windy Plugin use</title>
     </head>
     <body>
-        hi
+        
     </body>
     <script>
-        console.log("hi");
+        fetch('https://www.flymap.org.za/windy_plugins/tracker/log.json').then(e=>e.json()).then(d=>{
+            log(d);
+        })
     </script>
 </html>
