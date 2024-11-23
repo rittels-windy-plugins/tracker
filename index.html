@@ -7,39 +7,88 @@
         <style>
             body {
                 font-size: 0.9em;
+                font-family: Arial, sans-serif;
             }
             table {
-                font-family: Arial, sans-serif;
                 border-collapse: collapse;
                 border: 0;
                 margin-bottom: 20px;
                 td {
                     border: 1px solid #d3d3d3;
                     padding: 3px;
+                    &.plugin-name {
+                        border-color: transparent;
+                        font-weight: bold;
+                        color: #9d0300;
+                    }
+                    &.headings {
+                        font-size: 0.9em;
+                    }
+                    &.title {
+                        font-weight: bold;
+                    }
                 }
             }
             .info {
-                font-family: Arial, sans-serif;
-                font-size: 0.9em;
-                margin-bottom: 20px;
+                font-size:0.8em;
+                margin-bottom: 1em;
             }
         </style>
     </head>
     <body>
-        <div class="info">Windy-plugin usage tracker. Only users who have consented to anonymous tracking.</div>
+        <div class="info">
+            <h2>Windy-plugin usage tracker</h2>
+            Only tracks users who have consented to anonymous tracking.
+        </div>
     </body>
     <script>
         const { log } = console;
         const { floor } = Math;
         let data;
-        const plugins = [];
-        const obj = {};
-        const now = Date.now();
         const h1 = 1000 * 60 * 60;
         const h24 = h1 * 24;
         const w1 = h24 * 7;
+        const now = Date.now();
+        const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-        const headingKeys = ["past1h", "past24h", "past1w", "past4w", "ever"];
+        // Define arrays:
+
+        const hdwm = [
+            ["Past 1h", { t: [now - h1, now] }],
+            ["Past 24h", { t: [now - h24, now] }],
+            ["Past 1w", { t: [now - w1, now] }],
+            ["Past 4w", { t: [now - w1 * 4, now] }],
+            ["Ever", { t: [0, now] }],
+        ];
+
+        const byDay = [];
+        for (let d = 0; d < 7; d++) {
+            let t = dayStart(now - d * h24);
+            byDay.push([`${tStr(t)}<br>${weekdays[new Date(t).getDay()]}`, { t: [t, t + h24 - 1] }]);
+        }
+
+        const byWeek = [];
+        for (let w = 0; w < 6; w++) {
+            let t = dayStart(now - w * h24 * 7);
+            let sunday = t - new Date(now).getDay() * h24;
+            byWeek.push([
+                `<span style="font-size:0.8em">${tStr(sunday)} -<br>${tStr(sunday + h24 * 6)}</span>`,
+                { t: [sunday, sunday + h24 * 7 - 1] },
+            ]);
+        }
+
+        const ars = [
+            { ar: hdwm, title: "Hr-Day-W-4W" },
+            { ar: byDay, title: "By day" },
+            { ar: byWeek, title: "By week,<br>Sun - Sat" },
+        ];
+
+        fetch("https://www.flymap.org.za/windy_plugins/tracker/log.json", { cache: "no-store" })
+            .then((e) => e.json())
+            .then((d) => {
+                data = d;
+                ars.forEach(makeTable);
+            });
 
         function dayStart(t) {
             return h24 * floor(t / h24);
@@ -52,104 +101,54 @@
 
         function forHTML(s) {
             s = s[0].toUpperCase() + s.slice(1);
-            return s.replace(/_/g, " ").replace(/Day/, "");
+            return s.replace(/_/g, " ");
         }
 
-        const starts = [];
-        for (let d = 0; d < 7; d++) {
-            starts.push(dayStart(now - d * h24));
-        }
-
-        fetch("https://www.flymap.org.za/windy_plugins/tracker/log.json", { cache: "no-store" })
-            .then((e) => e.json())
-            .then((d) => {
-                data = d;
-                data.forEach((e) => {
-                    if (!plugins.includes(e.plugin)) plugins.push(e.plugin);
-                });
-                plugins.forEach((p) => (obj[p] = {}));
-                for (let p in obj) {
-                    let opened = {}; //past1h: 0, past24h: 0, past1w: 0, ever: 0 };
-                    let for_3_min = {}; // past1h: 0, past24h: 0, past1w: 0, ever: 0 };
-                    headingKeys.forEach((k) => {
-                        opened[k] = 0;
-                        for_3_min[k] = 0;
-                    });
-
-                    const for_3_minDay = starts.map((e) => 0);
-                    const openedDay = starts.map((e) => 0);
-
-                    let reqs = data.filter((e) => e.plugin == p);
-                    reqs.forEach((e) => {
-                        let o = e.msg == "open_user" ? opened : e.msg == "3min" ? for_3_min : null;
-                        if (o == null) return;
-                        if (e.ts > now - h1) o.past1h++;
-                        if (e.ts > now - h24) o.past24h++;
-                        if (e.ts > now - w1) o.past1w++;
-                        if (e.ts > now - w1 * 4) o.past4w++;
-                        o.ever++;
-
-                        let ix = starts.findIndex((t) => e.ts > t);
-                        if (ix >= 0) {
-                            let a = e.msg == "open_user" ? openedDay : e.msg == "3min" ? for_3_minDay : null;
-                            if (a) a[ix]++;
-                        }
-                    });
-                    obj[p] = { opened, for_3_min, openedDay, for_3_minDay };
-                }
-                makeTable();
-                makeTableDays();
+        function countMsgs(ar) {
+            let obj = {};
+            let plugins = [];
+            data.forEach((e) => {
+                if (!plugins.includes(e.plugin)) plugins.push(e.plugin);
             });
+            plugins.forEach((p) => (obj[p] = {}));
+            for (let p in obj) {
+                let opened = {};
+                let for_3_min = {};
+                ar.forEach(([k]) => {
+                    opened[k] = 0;
+                    for_3_min[k] = 0;
+                });
+                let reqs = data.filter((e) => e.plugin == p);
+                reqs.forEach((e) => {
+                    let o = e.msg == "open_user" ? opened : e.msg == "3min" ? for_3_min : null;
+                    if (!o) return;
+                    ar.filter(([, { t }]) => e.ts >= t[0] && e.ts <= t[1]).forEach(([k]) => o[k]++);
+                });
+                obj[p] = { opened, for_3_min };
+            }
+            return obj;
+        }
 
-        function makeTable() {
+        function makeTable({ ar, title }) {
+            const obj = countMsgs(ar);
             const table = document.createElement("table");
-
             const row = document.createElement("tr");
-            for (let c = -1; c < headingKeys.length; c++) {
+            for (let c = -1; c < ar.length; c++) {
                 const cell = document.createElement("td");
-                cell.innerHTML = c == -1 ? "" : headingKeys[c].replace("past", "Past ");
+                cell.classList.add(c > -1 ? "headings" : "title");
+                cell.innerHTML = c == -1 ? title : ar[c][0]; //.replace("past", "Past ");
                 row.appendChild(cell);
             }
             table.appendChild(row);
             for (let p in obj) {
                 for (let r = 0; r < 3; r++) {
                     const row = document.createElement("tr");
-                    if (r == 0) row.innerHTML = "<b>" + p + "</b>";
+                    if (r == 0) row.innerHTML = `<td class="plugin-name" colspan="${ar.length}">` + p + `<td>`;
                     else {
                         let o = r == 1 ? "opened" : "for_3_min";
-                        for (let c = -1; c < headingKeys.length; c++) {
+                        for (let c = -1; c < ar.length; c++) {
                             const cell = document.createElement("td");
-                            cell.innerHTML = c == -1 ? forHTML(o) : obj[p][o][headingKeys[c]];
-                            row.appendChild(cell);
-                        }
-                    }
-                    table.appendChild(row);
-                }
-            }
-            document.body.appendChild(table);
-        }
-
-        function makeTableDays() {
-            const headingKeys = starts.map((t) => tStr(t));
-
-            const table = document.createElement("table");
-
-            const row = document.createElement("tr");
-            for (let c = -1; c < 7; c++) {
-                const cell = document.createElement("td");
-                cell.innerHTML = c == -1 ? "By day:" : headingKeys[c];
-                row.appendChild(cell);
-            }
-            table.appendChild(row);
-            for (let p in obj) {
-                for (let r = 0; r < 3; r++) {
-                    const row = document.createElement("tr");
-                    if (r == 0) row.innerHTML = "<b>" + p + "</b>";
-                    else {
-                        let o = r == 1 ? "openedDay" : "for_3_minDay";
-                        for (let c = -1; c < 7; c++) {
-                            const cell = document.createElement("td");
-                            cell.innerHTML = c == -1 ? forHTML(o) : obj[p][o][c];
+                            cell.innerHTML = c == -1 ? forHTML(o) : obj[p][o][ar[c][0]];
                             row.appendChild(cell);
                         }
                     }
